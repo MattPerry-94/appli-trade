@@ -1,5 +1,26 @@
 import type { Metadata } from "next";
 import { PageTitle } from "@/components/ui";
+import { getDaily } from "@/lib/yahoo";
+import { backtestScore, mergeBacktests, type Backtest } from "@/lib/backtest";
+import { BacktestTable, backtestVerdict } from "@/components/backtest-view";
+import { fmtDate, fmtNumber } from "@/lib/format";
+
+export const revalidate = 86400;
+
+/** Échantillon du test global : grands indices des trois zones + bitcoin. */
+const TEST_SET: { symbol: string; kind: "index" | "crypto" }[] = [
+  { symbol: "^FCHI", kind: "index" },
+  { symbol: "^STOXX50E", kind: "index" },
+  { symbol: "^GDAXI", kind: "index" },
+  { symbol: "^FTSE", kind: "index" },
+  { symbol: "^GSPC", kind: "index" },
+  { symbol: "^IXIC", kind: "index" },
+  { symbol: "^RUT", kind: "index" },
+  { symbol: "^N225", kind: "index" },
+  { symbol: "^HSI", kind: "index" },
+  { symbol: "^AXJO", kind: "index" },
+  { symbol: "BTC-EUR", kind: "crypto" },
+];
 
 export const metadata: Metadata = { title: "Méthode" };
 
@@ -16,7 +37,16 @@ const SIGNALS = [
   ["Peur / avidité", "0,5", "Crypto uniquement, lecture contrariante : l’euphorie précède souvent les corrections, la peur offre souvent de meilleurs points d’entrée."],
 ];
 
-export default function MethodePage() {
+export default async function MethodePage() {
+  const results = await Promise.all(
+    TEST_SET.map(async (a) => {
+      const daily = await getDaily(a.symbol, 10);
+      return backtestScore(daily, a.kind);
+    }),
+  );
+  const ok = results.filter((r): r is Backtest => r != null);
+  const merged = ok.length ? mergeBacktests(ok) : null;
+  const from = ok.length ? Math.min(...ok.map((r) => r.from)) : null;
   return (
     <div className="max-w-3xl">
       <PageTitle title="Méthode" subtitle="Comment Boussole calcule ses tendances, et ce qu’il faut (et ne faut pas) en attendre." />
@@ -81,6 +111,47 @@ export default function MethodePage() {
           </p>
         </section>
 
+        <section id="fiabilite" className="scroll-mt-24">
+          <h2 className="font-serif text-2xl font-semibold text-ink mb-3">Le score a-t-il fonctionné par le passé ?</h2>
+          <p>
+            Pour le vérifier, Boussole rejoue l’histoire : chaque semaine des dix dernières années, la partie technique du score
+            (tendance, moyennes, dynamiques, RSI, MACD) est recalculée avec les seules données connues à cette date, puis on regarde
+            si le cours était plus haut <strong className="text-ink">trois mois plus tard</strong>. Aucun réglage n’a été ajusté
+            après coup pour améliorer le résultat.
+          </p>
+          {merged && from ? (
+            <>
+              <p className="mt-3">
+                Résultat cumulé sur {ok.length} grands marchés (CAC 40, Euro Stoxx 50, DAX, FTSE 100, S&amp;P 500, Nasdaq, Russell 2000,
+                Nikkei, Hang Seng, ASX 200 et bitcoin), depuis {fmtDate(from * 1000, { month: "long", year: "numeric" })} :
+              </p>
+              <div className="mt-4 text-base">
+                <BacktestTable
+                  rows={[
+                    { label: "Haussier", hint: "≥ 55", s: merged.bullish },
+                    { label: "Neutre", hint: "46–54", s: merged.neutral },
+                    { label: "Baissier", hint: "≤ 45", s: merged.bearish },
+                    { label: "Toutes périodes", hint: "référence", s: merged.all },
+                  ]}
+                />
+              </div>
+              <p className="mt-4 text-ink">{backtestVerdict(merged).text.replace("Sur cet actif, le", "Sur ces marchés, le")}</p>
+              <p className="mt-3">
+                Comment lire ce tableau : la ligne « Toutes périodes » est la référence du hasard (les marchés montent plus souvent
+                qu’ils ne baissent, d’où un chiffre supérieur à 50 %). Le score n’a de valeur que si la ligne « Haussier » fait
+                nettement mieux que cette référence et la ligne « Baissier » nettement moins bien. Chaque fiche d’actif affiche le
+                même test, sur son propre historique.
+              </p>
+              <p className="mt-3 text-sm">
+                {fmtNumber(merged.all.n, 0)} observations. Les fenêtres de trois mois se chevauchent d’une semaine sur l’autre : un
+                écart de quelques points n’est pas significatif.
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm">Résultats momentanément indisponibles (historiques non chargés).</p>
+          )}
+        </section>
+
         <section>
           <h2 className="font-serif text-2xl font-semibold text-ink mb-3">Les limites</h2>
           <ul className="list-disc pl-5 space-y-2">
@@ -97,7 +168,8 @@ export default function MethodePage() {
             Cours, historiques, fondamentaux et avis d’analystes : Yahoo Finance. Cryptomonnaies : CoinGecko. Indice peur /
             avidité : alternative.me. Actualités : flux publics d’Investing.com, Le Figaro, La Tribune, Cryptoast, Journal du
             Coin, Cointelegraph, CoinDesk, CNBC, MarketWatch et Google Actualités. Calendrier des banques centrales : sites
-            officiels de la Fed, de la BCE, de la Banque du Japon et de la Banque d’Angleterre.
+            officiels de la Fed, de la BCE, de la Banque du Japon et de la Banque d’Angleterre. Indicateurs économiques : portail
+            de données de la Banque centrale européenne.
           </p>
         </section>
       </div>

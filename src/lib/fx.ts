@@ -1,7 +1,7 @@
 import "server-only";
 import { getQuotes } from "./yahoo";
 
-const CURRENCIES = ["USD", "GBP", "JPY", "CHF", "CNY", "HKD", "KRW", "INR", "TWD", "AUD", "DKK", "SEK"];
+const CURRENCIES = ["USD", "GBP", "JPY", "CHF", "CNY", "HKD", "KRW", "INR", "TWD", "AUD", "DKK", "SEK", "NOK", "CAD", "SGD"];
 
 /** Taux : nombre d'unités de devise pour 1 €. */
 export async function getEurRates(): Promise<Record<string, number>> {

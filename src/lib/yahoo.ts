@@ -36,6 +36,13 @@ export interface Quote {
   analystRating: string | null;
   earningsDate: number | null;
   earningsEstimate: boolean;
+  /** Frais courants annuels (ETF), en % */
+  ter: number | null;
+  ytdReturn: number | null;
+  /** Dividende annuel par action (prévisionnel) */
+  dividendRate: number | null;
+  /** Date de versement du prochain dividende (si connue) */
+  dividendDate: number | null;
 }
 
 export interface Bar {
@@ -99,6 +106,10 @@ function normalizeQuote(q: any): Quote {
     analystRating: q.averageAnalystRating ?? null,
     earningsDate: ms(q.earningsTimestampStart ?? q.earningsTimestamp),
     earningsEstimate: Boolean(q.isEarningsDateEstimate),
+    ter: num(q.netExpenseRatio ?? q.annualReportExpenseRatio),
+    ytdReturn: num(q.ytdReturn),
+    dividendRate: num(q.dividendRate ?? q.trailingAnnualDividendRate),
+    dividendDate: ms(q.dividendDate),
   };
 }
 
@@ -118,7 +129,7 @@ async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
   return symbols.map((s) => map.get(s)).filter((q): q is Quote => Boolean(q));
 }
 
-const cachedQuotes = unstable_cache(fetchQuotes, ["yf-quotes-v1"], { revalidate: 60 });
+const cachedQuotes = unstable_cache(fetchQuotes, ["yf-quotes-v2"], { revalidate: 60 });
 
 export async function getQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
@@ -251,6 +262,38 @@ export async function getMonthly(symbol: string): Promise<Bar[]> {
   }
 }
 
+// ---------- Dividendes ----------
+
+export interface Dividend {
+  t: number; // secondes UNIX (date de détachement)
+  amount: number;
+}
+
+interface DivChartRes {
+  events?: { dividends?: { amount?: unknown; date?: unknown }[] | Record<string, { amount?: unknown; date?: unknown }> };
+}
+
+async function fetchDividends(symbol: string): Promise<Dividend[]> {
+  const res = (await yf.chart(symbol, { period1: new Date("2000-01-01"), interval: "1mo", events: "div" }, NO_VALIDATE)) as DivChartRes;
+  const raw = res.events?.dividends ?? [];
+  const list = Array.isArray(raw) ? raw : Object.values(raw);
+  return list
+    .map((d) => ({ t: Math.floor((ms(d.date) ?? 0) / 1000), amount: num(d.amount) ?? 0 }))
+    .filter((d) => d.t > 0 && d.amount > 0)
+    .sort((a, b) => a.t - b.t);
+}
+const cachedDividends = unstable_cache(fetchDividends, ["yf-div-v1"], { revalidate: 43200 });
+
+/** Historique des dividendes versés depuis 2000. */
+export async function getDividends(symbol: string): Promise<Dividend[]> {
+  try {
+    return await cachedDividends(symbol);
+  } catch (e) {
+    console.error("[yahoo] dividends", symbol, (e as Error).message);
+    return [];
+  }
+}
+
 // ---------- Mini-courbes (plusieurs symboles d'un coup) ----------
 
 const UA =
@@ -312,6 +355,9 @@ export interface Fundamentals {
   pegRatio: number | null;
   trend: { period: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }[];
   exDividendDate: number | null;
+  dividendDate: number | null;
+  payoutRatio: number | null;
+  fiveYearAvgDividendYield: number | null;
   earningsDates: number[];
 }
 
@@ -365,12 +411,15 @@ async function fetchFundamentals(symbol: string): Promise<Fundamentals | null> {
       sell: Number(t.sell ?? 0),
       strongSell: Number(t.strongSell ?? 0),
     })),
-    exDividendDate: ms(ce.exDividendDate),
+    exDividendDate: ms(ce.exDividendDate ?? sd.exDividendDate),
+    dividendDate: ms(ce.dividendDate),
+    payoutRatio: num(sd.payoutRatio),
+    fiveYearAvgDividendYield: num(sd.fiveYearAvgDividendYield),
     earningsDates: ((ce.earnings?.earningsDate ?? []) as unknown[]).map(ms).filter((x): x is number => x != null),
   };
 }
 
-const cachedFundamentals = unstable_cache(fetchFundamentals, ["yf-fund-v1"], { revalidate: 21600 });
+const cachedFundamentals = unstable_cache(fetchFundamentals, ["yf-fund-v2"], { revalidate: 21600 });
 
 export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
   try {
@@ -440,4 +489,26 @@ export async function getSymbolNews(query: string): Promise<NewsItem[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * Fondamentaux de nombreuses valeurs, par petits lots (mis en cache 6 h par valeur).
+ * Au-delà du budget de temps, on renvoie ce qui est disponible plutôt que de bloquer la page.
+ */
+export async function getFundamentalsMany(symbols: string[], concurrency = 8, budgetMs = 15000): Promise<Map<string, Fundamentals>> {
+  const out = new Map<string, Fundamentals>();
+  const queue = [...symbols];
+  const deadline = Date.now() + budgetMs;
+  const worker = async () => {
+    while (queue.length && Date.now() < deadline) {
+      const s = queue.shift() as string;
+      const f = await getFundamentals(s);
+      if (f) out.set(s, f);
+    }
+  };
+  await Promise.race([
+    Promise.all(Array.from({ length: concurrency }, worker)),
+    new Promise((r) => setTimeout(r, budgetMs)),
+  ]);
+  return out;
 }

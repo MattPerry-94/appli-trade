@@ -4,6 +4,8 @@ import Link from "next/link";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { TickerStrip } from "@/components/ticker-strip";
+import { AlertWatcher } from "@/components/alert-watcher";
+import { ServiceWorker } from "@/components/service-worker";
 
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
@@ -27,6 +29,8 @@ export const metadata: Metadata = {
   title: { default: "Boussole — marchés, actions & crypto", template: "%s · Boussole" },
   description:
     "Cours des bourses européennes, américaines et asiatiques, des cryptomonnaies, des devises et des matières premières, avec des tendances expliquées.",
+  applicationName: "Boussole",
+  appleWebApp: { capable: true, title: "Boussole", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -45,6 +49,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-screen flex flex-col antialiased">
         <SiteHeader />
         <TickerStrip />
+        <AlertWatcher />
+        <ServiceWorker />
         <main className="flex-1 w-full max-w-[1280px] mx-auto px-4 sm:px-6 pt-6 pb-16">{children}</main>
         <footer className="border-t border-line">
           <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8 grid gap-6 sm:grid-cols-[1fr_auto] text-sm text-ink-3">
@@ -63,9 +69,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/favoris" className="hover:text-ink">
                 Favoris
               </Link>
+              <Link href="/portefeuille" className="hover:text-ink">
+                Portefeuille
+              </Link>
             </nav>
             <p className="ticker sm:col-span-2">
-              Données : Yahoo Finance, CoinGecko, alternative.me, flux RSS des médias cités.
+              Données : Yahoo Finance, CoinGecko, Banque centrale européenne, alternative.me, flux RSS des médias cités.
             </p>
           </div>
         </footer>

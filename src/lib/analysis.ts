@@ -4,7 +4,7 @@
 import { last, lastAt, logReturns, macd, maxDrawdown, mean, rsi, sma, stdev } from "./indicators";
 import { fmtNumber, fmtPct, fmtPrice } from "./format";
 
-export type AssetKind = "stock" | "index" | "crypto" | "fx" | "commodity";
+export type AssetKind = "stock" | "etf" | "index" | "crypto" | "fx" | "commodity";
 
 export interface Signal {
   key: string;

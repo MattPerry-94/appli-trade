@@ -7,6 +7,7 @@ import { fmtNumber, fmtPrice } from "@/lib/format";
 import { Change, MarketState, PageTitle, ScoreBar, SectionTitle, Sparkline } from "@/components/ui";
 import { WatchButton } from "@/components/watch-button";
 import { LiveRefresh } from "@/components/live-refresh";
+import { EconomySection } from "@/components/economy-section";
 
 export const metadata: Metadata = { title: "Marchés" };
 export const revalidate = 60;
@@ -19,7 +20,7 @@ export default async function MarchesPage() {
 
   return (
     <div className="space-y-12">
-      <PageTitle title="Marchés" subtitle="Indices boursiers des trois grandes zones, devises, matières premières et taux.">
+      <PageTitle title="Marchés" subtitle="Indices boursiers des trois grandes zones, devises, matières premières, taux et indicateurs économiques de la zone euro.">
         <LiveRefresh seconds={60} />
       </PageTitle>
 
@@ -30,7 +31,7 @@ export default async function MarchesPage() {
         </section>
       ))}
 
-      <div className="grid gap-12 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
         <section>
           <SectionTitle>Devises</SectionTitle>
           <MarketTable quotes={pick(FOREX.map((f) => f.symbol))} sparks={sparks} digits={4} compact />
@@ -46,6 +47,8 @@ export default async function MarchesPage() {
         <p className="ticker mt-2">Les taux sont exprimés en %. Le VIX mesure la volatilité attendue sur le S&amp;P 500 : au-dessus de 25–30, le marché est nerveux.</p>
       </section>
       <p className="ticker">Mini-courbes : 3 mois. Score de tendance rapide : moyennes 50/200 jours et dynamique sur 1 an.</p>
+
+      <EconomySection />
     </div>
   );
 }

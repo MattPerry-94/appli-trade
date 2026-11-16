@@ -32,7 +32,7 @@ const COLS: { key: SortKey; label: string; className?: string }[] = [
   { key: "yearChangePct", label: "1 an", className: "hidden md:table-cell" },
   { key: "capEur", label: "Capitalisation", className: "hidden lg:table-cell" },
   { key: "pe", label: "PER", className: "hidden lg:table-cell" },
-  { key: "dividendYield", label: "Rdt", className: "hidden xl:table-cell" },
+  { key: "dividendYield", label: "Rdt", className: "hidden lg:table-cell" },
   { key: "score", label: "Tendance" },
 ];
 
@@ -58,6 +58,7 @@ export function StockScreener({
   );
   const [sector, setSector] = useState("all");
   const [q, setQ] = useState("");
+  const [minYield, setMinYield] = useState(0);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>(
     initialSort === "score" ? { key: "score", dir: -1 } : { key: "capEur", dir: -1 },
   );
@@ -68,6 +69,7 @@ export function StockScreener({
       (r) =>
         (region === "all" || r.region === region) &&
         (sector === "all" || r.sector === sector) &&
+        (!minYield || (r.dividendYield ?? 0) >= minYield) &&
         (!nq || norm(r.name).includes(nq) || norm(r.symbol).includes(nq)),
     );
     out.sort((a, b) => {
@@ -80,7 +82,7 @@ export function StockScreener({
       return ((va as number) - (vb as number)) * sort.dir;
     });
     return out;
-  }, [rows, region, sector, q, sort]);
+  }, [rows, region, sector, q, sort, minYield]);
 
   const clickSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: key === "name" ? 1 : -1 }));
@@ -123,6 +125,23 @@ export function StockScreener({
           {sectors.map((s) => (
             <option key={s} value={s}>
               {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={minYield}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setMinYield(v);
+            if (v) setSort({ key: "dividendYield", dir: -1 });
+          }}
+          className="h-9 rounded-md border border-line bg-surface px-2 text-sm"
+          aria-label="Rendement minimal du dividende"
+        >
+          <option value={0}>Tous rendements</option>
+          {[2, 3, 4, 5].map((v) => (
+            <option key={v} value={v}>
+              Dividende ≥ {v} %
             </option>
           ))}
         </select>
@@ -184,7 +203,7 @@ export function StockScreener({
                 </td>
                 <td className="hidden lg:table-cell text-ink-2">{fmtCompact(r.capEur, "EUR")}</td>
                 <td className="hidden lg:table-cell text-ink-2">{r.pe != null && r.pe > 0 ? fmtNumber(r.pe, 1) : "—"}</td>
-                <td className="hidden xl:table-cell text-ink-2">{r.dividendYield != null ? `${fmtNumber(r.dividendYield, 1)} %` : "—"}</td>
+                <td className="hidden lg:table-cell text-ink-2">{r.dividendYield != null ? `${fmtNumber(r.dividendYield, 1)} %` : "—"}</td>
                 <td>
                   <ScoreBar score={r.score} size="sm" />
                 </td>
@@ -199,7 +218,7 @@ export function StockScreener({
       </div>
       <p className="ticker mt-4 leading-relaxed">
         Capitalisations converties en euros. « Tendance » : score rapide 0–100 (position vs moyennes 50 et 200 jours,
-        dynamique sur 1 an, avis moyen des analystes). L’analyse complète est sur chaque fiche.
+        dynamique sur 1 an, avis moyen des analystes). « Rdt » : rendement du dividende annoncé. L’analyse complète est sur chaque fiche.
       </p>
     </div>
   );

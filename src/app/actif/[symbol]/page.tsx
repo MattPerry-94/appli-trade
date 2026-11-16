@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getChart, getDaily, getFundamentals, getMonthly, getQuote, getSymbolNews, type Fundamentals, type Quote } from "@/lib/yahoo";
+import { getChart, getDaily, getDividends, getFundamentals, getMonthly, getQuote, getSymbolNews, type Fundamentals, type Quote } from "@/lib/yahoo";
+import { backtestScore } from "@/lib/backtest";
+import { summarizeDividends } from "@/lib/dividends";
 import { analyze, type AssetKind } from "@/lib/analysis";
 import { autoDigits, renderTime, fmtCompact, fmtDate, fmtDateTime, fmtNumber, fmtPct, fmtPrice, fmtSigned, timeAgo, trendClass } from "@/lib/format";
-import { indexDef, stockDef, REGION_LABEL } from "@/lib/universe";
+import { etfDef, indexDef, stockDef, REGION_LABEL } from "@/lib/universe";
 import { PriceChart } from "@/components/price-chart";
 import { AnalysisView, SeasonalityGrid } from "@/components/analysis-view";
 import { WatchButton } from "@/components/watch-button";
-import { ChangePill, Empty, MarketState, SectionTitle, Stat } from "@/components/ui";
+import { Badge, ChangePill, Empty, MarketState, SectionTitle, Stat } from "@/components/ui";
+import { BacktestView } from "@/components/backtest-view";
+import { DividendsView } from "@/components/dividends-view";
+import { AssetActions } from "@/components/asset-actions";
 import { LiveRefresh } from "@/components/live-refresh";
 import { Expandable } from "@/components/expandable";
 
@@ -18,6 +23,9 @@ function kindOf(q: Quote): AssetKind {
   switch (q.quoteType) {
     case "EQUITY":
       return "stock";
+    case "ETF":
+    case "MUTUALFUND":
+      return "etf";
     case "CURRENCY":
       return "fx";
     case "FUTURE":
@@ -31,6 +39,7 @@ function kindOf(q: Quote): AssetKind {
 
 const KIND_LABEL: Record<AssetKind, string> = {
   stock: "Action",
+  etf: "ETF",
   index: "Indice",
   fx: "Devise",
   commodity: "Matière première",
@@ -50,12 +59,13 @@ export default async function AssetPage(props: PageProps<"/actif/[symbol]">) {
   if (!quote || quote.price == null) notFound();
   const kind = kindOf(quote);
 
-  const [initial, daily, monthly, fundamentals, news] = await Promise.all([
+  const [initial, daily, monthly, fundamentals, news, dividends] = await Promise.all([
     getChart(symbol, "1A"),
-    getDaily(symbol, 3),
+    getDaily(symbol, 10),
     getMonthly(symbol),
     kind === "stock" ? getFundamentals(symbol) : Promise.resolve(null),
     getSymbolNews(kind === "stock" ? quote.name : symbol),
+    kind === "stock" || kind === "etf" ? getDividends(symbol) : Promise.resolve([]),
   ]);
 
   const analysis = analyze({
@@ -76,10 +86,16 @@ export default async function AssetPage(props: PageProps<"/actif/[symbol]">) {
       : null,
   });
 
+  const backtest = analysis ? backtestScore(daily, kind) : null;
+  const divSummary = summarizeDividends(dividends);
+  const showDividends = divSummary != null && divSummary.years.some((y) => !y.partial && y.total > 0) && dividends[dividends.length - 1].t * 1000 > renderTime() - 2 * 366 * 86400_000;
+
   const digits = kind === "fx" ? 4 : undefined;
   const def = stockDef(symbol);
   const idx = indexDef(symbol);
-  const section = kind === "stock" ? { href: "/actions", label: "Actions" } : { href: "/marches", label: "Marchés" };
+  const etf = etfDef(symbol);
+  const section =
+    kind === "stock" ? { href: "/actions", label: "Actions" } : kind === "etf" ? { href: "/etf", label: "ETF" } : { href: "/marches", label: "Marchés" };
 
   return (
     <div>
@@ -121,9 +137,19 @@ export default async function AssetPage(props: PageProps<"/actif/[symbol]">) {
             {quote.time ? `Dernier cours : ${fmtDateTime(quote.time)} (heure de Paris)` : ""} · données éventuellement différées
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <LiveRefresh seconds={60} />
-          <WatchButton item={{ kind: "asset", id: quote.symbol, name: quote.name }} />
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <div className="flex items-center gap-4">
+            <LiveRefresh seconds={60} />
+            <WatchButton item={{ kind: "asset", id: quote.symbol, name: quote.name }} />
+          </div>
+          <AssetActions
+            kind="asset"
+            symbol={quote.symbol}
+            name={quote.name}
+            price={quote.price}
+            currency={quote.currency}
+            benchmark={kind === "stock" && def?.region === "europe" ? "^STOXX50E" : kind === "stock" && def?.region === "asie" ? "^N225" : "^GSPC"}
+          />
         </div>
       </header>
 
@@ -137,9 +163,35 @@ export default async function AssetPage(props: PageProps<"/actif/[symbol]">) {
           ) : (
             <Empty>Historique insuffisant pour calculer une tendance.</Empty>
           )}
+          {backtest && <BacktestView backtest={backtest} />}
+          {showDividends && divSummary && (
+            <DividendsView
+              summary={divSummary}
+              currency={quote.currency}
+              yieldPct={quote.dividendYield}
+              rate={kind === "stock" ? quote.dividendRate : null}
+              payoutRatio={fundamentals?.payoutRatio ?? null}
+              exDate={fundamentals?.exDividendDate ?? null}
+              payDate={fundamentals?.dividendDate ?? quote.dividendDate}
+              fiveYearAvgYield={fundamentals?.fiveYearAvgDividendYield ?? null}
+            />
+          )}
         </div>
 
         <aside className="space-y-10 min-w-0">
+          {(etf || kind === "etf") && (
+            <section>
+              <SectionTitle>Le fonds</SectionTitle>
+              <dl className="text-sm">
+                {etf && <Stat label="Indice suivi" value={etf.tracks} />}
+                {etf && <Stat label="Émetteur" value={etf.issuer} />}
+                <Stat label="Frais courants" value={quote.ter ?? etf?.ter ? `${fmtNumber(quote.ter ?? etf?.ter ?? null, 2)} % / an` : "—"} />
+                {etf && <Stat label="Éligible PEA" value={etf.pea ? <Badge tone="accent">Oui</Badge> : "Non (compte-titres)"} />}
+                {quote.ytdReturn != null && <Stat label="Depuis le 1er janvier" value={<span className={trendClass(quote.ytdReturn)}>{fmtPct(quote.ytdReturn)}</span>} />}
+              </dl>
+              <p className="ticker mt-2">À vérifier dans le DIC de l’émetteur avant d’investir.</p>
+            </section>
+          )}
           <section>
             <SectionTitle>Chiffres clés</SectionTitle>
             <dl className="text-sm">

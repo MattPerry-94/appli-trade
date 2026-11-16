@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { searchSymbols } from "@/lib/yahoo";
-import { COMMODITIES, FOREX, INDICES, RATES, STOCKS } from "@/lib/universe";
+import { COMMODITIES, ETFS, FOREX, INDICES, RATES, STOCKS } from "@/lib/universe";
 
 interface Hit {
   rank?: number | null;
@@ -20,6 +20,7 @@ const norm = (s: string) =>
 const LOCAL = [
   ...INDICES.map((i) => ({ symbol: i.symbol, name: i.name, type: "INDEX", exchange: i.country })),
   ...STOCKS.map((s) => ({ symbol: s.symbol, name: s.name, type: "EQUITY", exchange: s.country })),
+  ...ETFS.map((s) => ({ symbol: s.symbol, name: s.name, type: "ETF", exchange: s.pea ? "ETF · PEA" : "ETF" })),
   ...FOREX.map((s) => ({ symbol: s.symbol, name: s.name, type: "CURRENCY", exchange: "Forex" })),
   ...COMMODITIES.map((s) => ({ symbol: s.symbol, name: s.name, type: "FUTURE", exchange: "Matières premières" })),
   ...RATES.map((s) => ({ symbol: s.symbol, name: s.name, type: "INDEX", exchange: "Taux" })),

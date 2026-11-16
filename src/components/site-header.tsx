@@ -9,10 +9,13 @@ const NAV = [
   { href: "/", label: "Vue d'ensemble" },
   { href: "/marches", label: "Marchés" },
   { href: "/actions", label: "Actions" },
+  { href: "/etf", label: "ETF" },
   { href: "/crypto", label: "Crypto" },
+  { href: "/comparer", label: "Comparer" },
+  { href: "/portefeuille", label: "Portefeuille" },
+  { href: "/favoris", label: "Favoris" },
   { href: "/actualites", label: "Actualités" },
   { href: "/calendrier", label: "Calendrier" },
-  { href: "/favoris", label: "Favoris" },
 ];
 
 export function SiteHeader() {
@@ -26,33 +29,19 @@ export function SiteHeader() {
             <Logo />
             <span className="font-serif text-xl font-semibold tracking-tight">Boussole</span>
           </Link>
-          <nav className="hidden xl:flex items-center gap-1 ml-6 text-sm whitespace-nowrap" aria-label="Navigation principale">
-            {NAV.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                aria-current={active(n.href) ? "page" : undefined}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  active(n.href) ? "text-ink bg-surface-2 font-medium" : "text-ink-2 hover:text-ink"
-                }`}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
           <div className="ml-auto flex items-center gap-2">
             <SearchDialog />
             <ThemeToggle />
           </div>
         </div>
-        <nav className="xl:hidden -mx-4 px-4 flex gap-1 pb-2 scroll-x text-sm" aria-label="Navigation principale">
+        <nav className="-mx-4 px-4 sm:mx-0 sm:px-0 flex gap-1 pb-2 scroll-x text-sm" aria-label="Navigation principale">
           {NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               aria-current={active(n.href) ? "page" : undefined}
-              className={`px-3 py-1 rounded-md whitespace-nowrap ${
-                active(n.href) ? "text-ink bg-surface-2 font-medium" : "text-ink-2"
+              className={`px-3 py-1.5 rounded-md whitespace-nowrap transition-colors ${
+                active(n.href) ? "text-ink bg-surface-2 font-medium" : "text-ink-2 hover:text-ink"
               }`}
             >
               {n.label}

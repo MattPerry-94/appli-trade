@@ -5,6 +5,9 @@ import { notFound } from "next/navigation";
 import { getCoinDetail, getCoinHistory, getFearGreed } from "@/lib/coingecko";
 import { getChart, getDaily, getMonthly, getSymbolNews, type Bar } from "@/lib/yahoo";
 import { analyze } from "@/lib/analysis";
+import { backtestScore } from "@/lib/backtest";
+import { BacktestView } from "@/components/backtest-view";
+import { AssetActions } from "@/components/asset-actions";
 import { fmtCompact, fmtDate, fmtNumber, fmtPct, fmtPrice, timeAgo, trendClass } from "@/lib/format";
 import { PriceChart } from "@/components/price-chart";
 import { AnalysisView, SeasonalityGrid } from "@/components/analysis-view";
@@ -29,7 +32,7 @@ export default async function CoinPage(props: PageProps<"/crypto/[id]">) {
   // Historique long via Yahoo (XXX-EUR) si le symbole correspond bien à cette crypto,
   // sinon 365 jours via CoinGecko.
   const ySym = `${coin.symbol}-EUR`;
-  const [yDaily, fng] = await Promise.all([getDaily(ySym, 3), getFearGreed()]);
+  const [yDaily, fng] = await Promise.all([getDaily(ySym, 10), getFearGreed()]);
   const yLast = yDaily[yDaily.length - 1]?.c;
   const yahooOk = Boolean(yLast && coin.price && Math.abs(yLast / coin.price - 1) < 0.08 && yDaily.length > 200);
 
@@ -47,6 +50,7 @@ export default async function CoinPage(props: PageProps<"/crypto/[id]">) {
   const news = await getSymbolNews(`${coin.name} crypto`);
 
   const analysis = analyze({ kind: "crypto", daily, monthly, currency: "EUR", fearGreed: fng?.value ?? null });
+  const backtest = analysis && yahooOk ? backtestScore(daily, "crypto") : null;
 
   return (
     <div>
@@ -84,9 +88,20 @@ export default async function CoinPage(props: PageProps<"/crypto/[id]">) {
             <span className="text-sm text-ink-3">sur 24 h</span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <LiveRefresh seconds={120} />
-          <WatchButton item={{ kind: "coin", id: coin.id, name: coin.name }} />
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <div className="flex items-center gap-4">
+            <LiveRefresh seconds={120} />
+            <WatchButton item={{ kind: "coin", id: coin.id, name: coin.name }} />
+          </div>
+          <AssetActions
+            kind="coin"
+            symbol={coin.id}
+            name={coin.name}
+            price={coin.price}
+            currency="EUR"
+            compareSymbol={yahooOk ? ySym : null}
+            benchmark={ySym === "BTC-EUR" ? "ETH-EUR" : "BTC-EUR"}
+          />
         </div>
       </header>
 
@@ -97,6 +112,7 @@ export default async function CoinPage(props: PageProps<"/crypto/[id]">) {
             {!yahooOk && <p className="ticker mt-2">Historique disponible : 12 mois (source CoinGecko).</p>}
           </section>
           {analysis ? <AnalysisView analysis={analysis} currency="€" kind="crypto" withSeasonality={false} /> : <Empty>Historique insuffisant pour calculer une tendance.</Empty>}
+          {backtest && <BacktestView backtest={backtest} />}
         </div>
 
         <aside className="space-y-10 min-w-0">
